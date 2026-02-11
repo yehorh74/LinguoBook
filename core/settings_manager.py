@@ -26,3 +26,38 @@ class SettingsManager:
     
     def set_model(self, model_code):
         self.store.put("model", selected=model_code)
+
+    def get_theme(self):
+        if self.store.exists("theme"):
+            return self.store.get("theme").get("selected", "Light")
+        return "Light"
+    
+    def set_theme(self, theme_name):
+        self.store.put("theme", selected=theme_name)
+
+    def get_palette(self):
+        if self.store.exists("palette"):
+            return self.store.get("palette").get("selected", "Gray")
+        return "Gray"
+    
+    def set_palette(self, palette_name):
+        self.store.put("palette", selected=palette_name)
+
+    def get_open_last_book(self):
+        if self.store.exists("open_last_book"):
+            return self.store.get("open_last_book").get("active", False)
+        return False
+
+    def set_open_last_book(self, value):
+        self.store.put("open_last_book", active=value)
+
+    # === HIGHLIGHT ===
+    def get_highlight_enabled(self):
+        # Sprawdzamy czy klucz istnieje w JsonStore
+        if self.store.exists("highlight_settings"):
+            return self.store.get("highlight_settings").get("enabled", True)
+        return True # Domyślnie włączone
+
+    def set_highlight_enabled(self, value):
+        # Zapisujemy do JsonStore (metoda put automatycznie zapisuje plik)
+        self.store.put("highlight_settings", enabled=value)

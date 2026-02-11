@@ -14,21 +14,27 @@ def load_fb2_simple(path):
     else:
         text = raw.decode("utf-8", errors="ignore")
 
-    # usuń namespace FB2
     text = re.sub(r'xmlns="[^"]+"', '', text, count=1)
-
-    # 🔥 BEZ lxml
     soup = BeautifulSoup(text, "html.parser")
 
-    paragraphs = soup.find_all("p")
+    # Szukamy tytułów i akapitów
+    # FB2 używa <title> dla nagłówków rozdziałów i <p> dla treści
+    elements = soup.find_all(['title', 'p'])
 
-    clean = [
-        p.get_text(strip=True)
-        for p in paragraphs
-        if p.get_text(strip=True)
-    ]
+    structured_data = []
+    for el in elements:
+        content = el.get_text(strip=True)
+        if not content:
+            continue
+        
+        # Jeśli element jest wewnątrz tagu <title>, oznaczamy go jako tytuł
+        # (BeautifulSoup znajdzie <p> wewnątrz <title>, więc sprawdzamy rodzica)
+        if el.name == 'title' or el.parent.name == 'title':
+            structured_data.append({'type': 'title', 'content': content})
+        else:
+            structured_data.append({'type': 'paragraph', 'content': content})
 
-    if not clean:
-        raise ValueError("FB2 loaded but no paragraphs found")
+    if not structured_data:
+        raise ValueError("FB2 loaded but no content found")
 
-    return "\n\n".join(clean)
+    return structured_data

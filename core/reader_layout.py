@@ -5,68 +5,79 @@ from kivymd.uix.navigationdrawer import (
     MDNavigationDrawerHeader,
     MDNavigationDrawerItem,
 )
-from kivymd.uix.screenmanager import ScreenManager
+from kivymd.uix.screenmanager import MDScreenManager
 from kivymd.uix.screen import MDScreen
 
 from screens.reader import ReaderScreen
 
-
-class ReaderLayout(MDNavigationLayout):
+class ReaderLayout(MDScreen): 
     def __init__(self, app, **kwargs):
         super().__init__(**kwargs)
         self.app = app
 
-        # ===== SCREEN MANAGER =====
-        self.sm = ScreenManager()
-        screen = MDScreen(name="reader")
+        self.app.theme_cls.bind(theme_style=self.update_drawer_colors)
+        
+        # 1. Tworzymy layout nawigacji
+        self.nav_layout = MDNavigationLayout()
+        
+        # 2. Tworzymy wewnętrzny ScreenManager (wymagany przez MDNavigationLayout)
+        self.internal_sm = MDScreenManager()
+        
+        # 3. Tworzymy ekran czytnika i dodajemy go do wewnętrznego managera
+        self.reader_screen = ReaderScreen(app=self.app, name="reader_content")
+        self.reader_screen.open_drawer = self.open_drawer 
+        self.internal_sm.add_widget(self.reader_screen)
 
-        self.reader_screen = ReaderScreen(app=self.app)
-        self.reader_screen.open_drawer = self.open_drawer  #hook
-
-        screen.add_widget(self.reader_screen)
-        self.sm.add_widget(screen)
-        self.add_widget(self.sm)
+        # 4. Dodajemy wewnętrzny manager do layoutu nawigacji
+        self.nav_layout.add_widget(self.internal_sm)
 
         # ===== RIGHT DRAWER =====
         self.nav_drawer = MDNavigationDrawer(
             MDNavigationDrawerMenu(
                 MDNavigationDrawerHeader(text="Menu"),
-
                 MDNavigationDrawerItem(
                     icon="home",
                     text="Home",
+                    theme_text_color="Primary", 
                     on_release=lambda *_: self.go_home(),
-                    text_color=self.theme_cls.text_color,
                 ),
                 MDNavigationDrawerItem(
                     icon="book",
                     text="Book Shelf",
+                    theme_text_color="Primary",  
                     on_release=lambda *_: self.go_shelf(),
-                    text_color=self.theme_cls.text_color,
                 ),
                 MDNavigationDrawerItem(
                     icon="translate",
                     text="Dictionary",
+                    theme_text_color="Primary", 
                     on_release=lambda *_: self.go_dictionary(),
-                    text_color=self.theme_cls.text_color,
                 ),
                 MDNavigationDrawerItem(
                     icon="cog",
                     text="Settings",
+                    theme_text_color="Primary", 
                     on_release=lambda *_: self.go_settings(),
-                    text_color=self.theme_cls.text_color,
                 ),
                 MDNavigationDrawerItem(
                     icon="exit-to-app",
                     text="Exit",
+                    theme_text_color="Primary", 
                     on_release=lambda *_: self.app.stop(),
-                    text_color=self.theme_cls.text_color,
                 ),
             ),
             radius=(0, 16, 16, 0)   
         )
 
-        self.add_widget(self.nav_drawer)
+        # 5. Dodajemy drawer do layoutu nawigacji
+        self.nav_layout.add_widget(self.nav_drawer)
+        
+        # 6. Dodajemy cały layout nawigacji do tego ekranu (ReaderLayout)
+        self.add_widget(self.nav_layout)
+
+    def on_pre_enter(self, *args):
+        if hasattr(self.reader_screen, "on_pre_enter"):
+            self.reader_screen.on_pre_enter()
 
     def open_drawer(self, *args):
         self.nav_drawer.set_state("open")
@@ -86,3 +97,23 @@ class ReaderLayout(MDNavigationLayout):
     def go_settings(self):
         self.nav_drawer.set_state("close")
         self.app.open_settings(source="reader")
+    
+    def update_drawer_colors(self, *args):
+        """Wywoływane automatycznie przy zmianie motywu."""
+        self.nav_drawer.md_bg_color = self.app.theme_cls.bg_normal
+
+        try:
+            menu = self.nav_drawer.children[0] 
+            for item in menu.children:
+                if isinstance(item, (MDNavigationDrawerItem, MDNavigationDrawerHeader)):
+                    # Ustawienie theme_text_color na Primary zazwyczaj 
+                    # automatycznie naprawia też kolor ikony w KivyMD
+                    item.theme_text_color = "Primary"
+                    
+                    # Jeśli chcesz mieć pewność co do koloru ikony, 
+                    # użyj icon_color zamiast theme_icon_color
+                    if hasattr(item, "icon_color"):
+                        # Pobieramy kolor tekstu odpowiedni dla obecnego motywu
+                        item.icon_color = self.app.theme_cls.text_color
+        except Exception as e:
+            print(f"Błąd aktualizacji kolorów drawera: {e}")

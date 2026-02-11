@@ -2,14 +2,10 @@ import os
 from kivymd.app import MDApp
 from kivymd.uix.screenmanager import MDScreenManager
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.label import MDLabel
 from kivy.metrics import dp
 from kivy.clock import Clock
 from kivy.utils import platform
-from kivy.uix.textinput import TextInput
 from kivy.core.window import Window
-from kivymd.uix.progressbar import MDProgressBar
 
 from core.fb2_loader import load_fb2_simple as load_fb2
 from core.reader_state import ReaderStateManager
@@ -22,6 +18,8 @@ from screens.shelf import ShelfScreen
 from screens.settings import SettingsScreen
 from screens.dictionary import DictionaryScreen
 from core.reader_layout import ReaderLayout
+from screens.loading_screen import LoadingScreen
+from core.pagination_engine import PaginationEngine
 
 if platform == "android":
     from native.android_picker import open_android_file_picker as open_file_picker, resolve_content_uri as resolve_uri
@@ -30,9 +28,6 @@ state_file = "reader_state.json" if platform == 'android' else "dev_reader_state
 
 class LinguoBookApp(MDApp):
     def build(self):
-        self.theme_cls.primary_palette = "Gray"
-        self.theme_cls.theme_style = "Light"
-        
         # Używamy ScreenManagera dla płynnych przejść
         self.sm = MDScreenManager()
         
@@ -42,6 +37,8 @@ class LinguoBookApp(MDApp):
         self.shelf = ShelfManager()
         self.dictionary = DictionaryManager()
         self.selected_model = self.settings.get_model()
+        self.theme_cls.primary_palette = self.settings.get_palette()
+        self.theme_cls.theme_style = self.settings.get_theme()
         
         self.delete_mode = False
         self.previous_screen = "home"
@@ -52,50 +49,68 @@ class LinguoBookApp(MDApp):
         return self.sm
 
     def setup_screens(self):
-        """Tworzy instancje ekranów i dodaje je do managera."""
-        self.screens = {
-            "home": MDScreen(name="home"),
-            "shelf": MDScreen(name="shelf"),
-            "settings": MDScreen(name="settings"),
-            "dictionary": MDScreen(name="dictionary"),
-            "reader": MDScreen(name="reader")
-        }
-        for screen in self.screens.values():
-            self.sm.add_widget(screen)
+        self.screens = {}
+
+        # 1. NAJPIERW dodaj ekran Home - on stanie się domyślnym ekranem startowym
+        self.screens["home"] = MDScreen(name="home")
+        self.screens["home"].add_widget(HomeScreen(app=self))
+        self.sm.add_widget(self.screens["home"])
+
+        # 2. POTEM dodaj resztę ekranów
+        self.reader_screen_instance = ReaderLayout(app=self, name="reader")
+        self.sm.add_widget(self.reader_screen_instance)
+
+        self.loading_screen = LoadingScreen() 
+        self.sm.add_widget(self.loading_screen)
+
+        self.screens["shelf"] = MDScreen(name="shelf")
+        self.screens["shelf"].add_widget(ShelfScreen(app=self))
+
+        self.screens["settings"] = MDScreen(name="settings")
+        self.screens["settings"].add_widget(SettingsScreen(app=self))
+
+        self.screens["dictionary"] = MDScreen(name="dictionary")
+        self.screens["dictionary"].add_widget(DictionaryScreen(app=self))
+
+        # Rejestrujemy resztę w pętli (pomijając home, który już dodaliśmy)
+        for name, screen in self.screens.items():
+            if name != "home":
+                self.sm.add_widget(screen)
 
     # --- Nawigacja zoptymalizowana ---
     def switch_screen(self, screen_name, direction="left"):
         self.sm.transition.direction = direction
         self.sm.current = screen_name
+        
+        # SYNCHRONIZACJA: Pobierz widget i wymuś odświeżenie danych
+        target_screen = self.sm.get_screen(screen_name)
+        if target_screen.children:
+            content = target_screen.children[0]
+            if hasattr(content, "on_enter"):
+                content.on_enter()
 
     def show_home(self):
-        self.screens["home"].clear_widgets()
-        self.screens["home"].add_widget(HomeScreen(app=self))
         self.switch_screen("home", direction="right")
         self.previous_screen = "home"
 
     def open_shelf(self, source="home", *_):
         self.previous_screen = source
-        self.screens["shelf"].clear_widgets()
-        self.screens["shelf"].add_widget(ShelfScreen(app=self))
         self.switch_screen("shelf", direction="left")
 
     def open_dictionary(self, source="home", *_):
         self.previous_screen = source
-        self.screens["dictionary"].clear_widgets()
-        self.screens["dictionary"].add_widget(DictionaryScreen(app=self))
         self.switch_screen("dictionary", direction="left")
 
     def open_settings(self, source="home", *_):
         self.previous_screen = source
-        self.screens["settings"].clear_widgets()
-        self.screens["settings"].add_widget(SettingsScreen(app=self))
         self.switch_screen("settings", direction="left")
 
     def show_reader(self):
-        self.screens["reader"].clear_widgets()
-        self.screens["reader"].add_widget(ReaderLayout(app=self))
         self.switch_screen("reader", direction="left")
+        # reader_screen_instance to ReaderLayout
+        # Wywołujemy on_pre_enter, który przekaże polecenie do wewnętrznego czytnika
+        if hasattr(self.reader_screen_instance, "on_pre_enter"):
+            self.reader_screen_instance.on_pre_enter()
         self.previous_screen = "reader"
 
     # --- Logika ładowania i plików ---
@@ -116,20 +131,23 @@ class LinguoBookApp(MDApp):
         )
 
     def on_start(self):
-        last_id = self.reader_state.current_book_id
-        if last_id:
-            all_books = self.shelf.get_books()
-            current_book = next((b for b in all_books if b["id"] == last_id), None)
-            if current_book:
-                self.last_book(current_book)
-                return
+        should_open_last = self.settings.get_open_last_book()
+        
+        if should_open_last:
+            # Pobieramy ostatni ID, który był zapisany jako 'current'
+            last_id = self.reader_state.current_book_id
+            if last_id:
+                all_books = self.shelf.get_books()
+                current_book = next((b for b in all_books if b["id"] == last_id), None)
+                
+                if current_book:
+                    # Ustawiamy parametry ZANIM Clock wywoła ładowanie
+                    self.reader_state.set_current_file(current_book["path"], current_book["id"])
+                    Clock.schedule_once(lambda dt: self.last_book(current_book), 0.2)
+                    return
 
-        last_added = self.shelf.get_last_book()
-        if last_added:
-            self.last_book(last_added)
-        else:
-            self.show_home()
-
+        self.show_home()
+        
     def get_current_book_title(self):
         current_id = self.reader_state.current_book_id
         if not current_id:
@@ -177,104 +195,52 @@ class LinguoBookApp(MDApp):
         Clock.schedule_once(lambda dt: self._load_and_start_pagination(book["path"]), 0.1)
 
     def _load_and_start_pagination(self, uri):
+        # Najpierw sprawdź, czy mamy to w JSONie
         if self.reader_state.load_cached_state():
-            self.show_reader()
+            # Skoro mamy strony i stronę, idziemy prosto do czytnika
+            self.show_reader() 
             return
 
+        # JEŚLI NIE MA CACHE:
         try:
+            # Dopiero tutaj resetujemy parametry dla nowej paginacji
+            self.reader_state.pages = []
+            self.reader_state.current_page = 0
+            
             text = load_fb2(uri)
             self.start_background_pagination(text)
         except Exception as e:
-            print(f"Error loading book: {e}")
+            print(f"Error: {e}")
             self.show_home()
 
     def show_loading(self, text="Loading…"):
-        self.sm.current_screen.clear_widgets()
-        
-        layout = MDBoxLayout(
-            orientation="vertical",
-            padding=dp(40),
-            spacing=dp(20),
-            adaptive_height=True,
-            pos_hint={"center_x": .5, "center_y": .5}
-        )
-        
-        self.loading_label = MDLabel(
-            text=text, 
-            halign="center", 
-            font_style="H6"
-        )
-        
-        # Tworzymy pasek postępu jako atrybut klasy
-        self.pagination_progress = MDProgressBar(
-            type="determinate", 
-            value=0, 
-            max=100,
-            size_hint_x=0.8,
-            pos_hint={"center_x": .5}
-        )
-        
-        layout.add_widget(self.loading_label)
-        layout.add_widget(self.pagination_progress)
-        self.sm.current_screen.add_widget(layout)
+        self.loading_screen.update_status(text, 0)
+        self.switch_screen("loading")
 
-    def start_background_pagination(self, text):
+    def start_background_pagination(self, structured_data):
+        # Resetujemy UI paska przed startem
+        self.loading_screen.progress_bar.value = 0
         self.show_loading("Paginating book…")
-        self._words = text.split(" ")
-        self._word_index = 0
-        self._current_words = []
-        self._pages = []
-
-        self._ti = TextInput(
-            font_size=dp(18),
-            size_hint=(None, None),
-            width=Window.width - dp(20),
-            height=self.get_reader_height(),
-            readonly=True,
-            multiline=True
+        
+        # Inicjalizacja silnika
+        self.pagination_engine = PaginationEngine(
+            app=self,
+            structured_data=structured_data,
+            on_progress=self._update_pagination_ui,
+            on_complete=self._finalize_pagination
         )
-        Clock.schedule_once(self._paginate_step, 0)
+        self.pagination_engine.start()
 
-    def _paginate_step(self, dt):
-        MAX_STEPS = 100 
-        CHUNK = 6
-        
-        # Obliczanie całkowitej liczby słów dla procentów
-        total_words = len(self._words)
+    def _update_pagination_ui(self, percentage):
+        # To wywołuje silnik co klatkę
+        self.loading_screen.progress_bar.value = percentage
+        self.loading_screen.status_label.text = f"Paginating: {int(percentage)}%"
 
-        for _ in range(MAX_STEPS):
-            if self._word_index >= total_words:
-                # Koniec paginacji
-                if self._current_words:
-                    self._pages.append(" ".join(self._current_words))
-                
-                self.pagination_progress.value = 100 
-                self.reader_state.pages = self._pages
-                self.reader_state.current_page = self.reader_state.restore_position()
-                self.reader_state.save_position()
-                self.show_reader()
-                return
-
-            words = self._words[self._word_index:self._word_index + CHUNK]
-            candidate = self._current_words + words
-            self._ti.text = " ".join(candidate)
-            self._ti._trigger_refresh_text()
-
-            if self._ti.minimum_height + self._ti.line_height > self._ti.height:
-                if self._current_words:
-                    self._pages.append(" ".join(self._current_words))
-                self._current_words = []
-            else:
-                self._current_words.extend(words)
-                self._word_index += CHUNK
-        
-        # AKTUALIZACJA PASKA PO KAŻDYM MAX_STEPS
-        if total_words > 0:
-            percentage = (self._word_index / total_words) * 100
-            self.pagination_progress.value = percentage
-            self.loading_label.text = f"Paginating: {int(percentage)}%"
-
-        Clock.schedule_once(self._paginate_step, 0)
+    def _finalize_pagination(self, pages):
+        self.reader_state.pages = pages
+        # Przywróć stronę lub zacznij od 0
+        self.reader_state.current_page = self.reader_state.restore_position()
+        self.show_reader()
 
     def get_reader_height(self):
         return Window.height - dp(130) # Uproszczony margines dla stabilności

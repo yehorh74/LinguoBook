@@ -16,7 +16,8 @@ class ShelfManager:
             books.append({
                 "id": key,
                 "path": data.get("path", ""),
-                "title": data.get("title", "Unknown")
+                "title": data.get("title", "Unknown"),
+                "author": data.get("author", "Unknown Author")
             })
         return books
 
@@ -29,7 +30,8 @@ class ShelfManager:
         self.store.put(
             bid,
             path=book["path"],
-            title=book["title"]
+            title=book["title"],
+            author=book.get("author", "Unknown Author")
         )
 
     def remove_book(self, book_id: str):
