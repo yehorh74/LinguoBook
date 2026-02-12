@@ -153,6 +153,24 @@ class LinguoBookApp(MDApp):
             0.1 # Dajemy ułamek sekundy na odświeżenie UI przed ciężką pracą
         )
 
+    def close_reader(self):
+        # Użytkownik wychodzi z czytnika
+        # 1. Zapisz postęp
+        self.reader_state.save_current_progress()
+        
+        # 2. AKTUALIZACJA W TLE (użytkownik tego nie widzi)
+        shelf_screen = self.root.get_screen('shelf').children[0] # ReaderLayout -> Shelf
+        shelf_screen.update_shelf_silently()
+        
+        # 3. Dopiero teraz zmień ekran
+        self.show_shelf()
+
+    def add_word_to_dict(self, word, trans):
+        self.dictionary.add(word, trans)
+        # Jeśli ekran słownika istnieje, zaktualizuj go po cichu
+        if self.root.has_screen('dictionary'):
+            self.root.get_screen('dictionary').update_dictionary_silently()
+
     def on_start(self):
         should_open_last = self.settings.get_open_last_book()
         
