@@ -11,7 +11,10 @@ class DictionaryScreen(MDBoxLayout):
     def __init__(self, app, **kwargs):
         super().__init__(orientation='vertical', spacing=10, **kwargs)
         self.app = app
+        self.l = self.app.lang
         self.words_to_load = []
+
+        l = self.app.lang
 
         # 1. Menu Sortowania (Budowane ręcznie)
         self.drop_sort_menu = MDDropdownMenu(width_mult=4)
@@ -19,13 +22,13 @@ class DictionaryScreen(MDBoxLayout):
 
         # 2. Toolbar
         top_layout = MDBoxLayout(size_hint_y=None, height=dp(40) + dp(24), padding=(0, dp(24), 0, 0))
-        tool_bar = MDTopAppBar(
-            title="DICTIONARY", 
+        self.tool_bar = MDTopAppBar(
+            title=l["dictionary"], 
             left_action_items=[["arrow-left", lambda x: self.app.go_back()]],
             right_action_items=[["sort", self.open_sort_menu]],
             anchor_title="left"
         )
-        top_layout.add_widget(tool_bar)
+        top_layout.add_widget(self.tool_bar)
         self.add_widget(top_layout)
 
         # 2. Layout słownika
@@ -36,12 +39,23 @@ class DictionaryScreen(MDBoxLayout):
         scroll_view.add_widget(self.layout_dict)
         self.add_widget(scroll_view)
 
+    def on_enter(self, *args):
+        """Wywoływane przez ScreenManager przy każdym wejściu na ekran."""
+        # 1. Odśwież tłumaczenia UI
+        self.refresh_localization()
+        
+        # 2. Reszta logiki ładowania słów
+        Clock.unschedule(self.load_next_word)
+        self.layout_dict.clear_widgets()
+        self.start_loading_words()
+
     def setup_sort_menu(self):
+        l = self.app.lang
         # Definiujemy dane menu
         menu_data = [
-            ("Sort (A-Z)", "sort-alphabetical-ascending", "abc"),
-            ("Sort (Newest)", "sort-calendar-ascending", "new"),
-            ("Sort (Oldest)", "sort-calendar-descending", "old"),
+            (l["sort_menu_AZ"], "sort-alphabetical-ascending", "abc"),
+            (l["sort_menu_newest"], "sort-calendar-ascending", "new"),
+            (l["sort_menu_oldest"], "sort-calendar-descending", "old"),
         ]
         
         # Tworzymy listę widgetów zamiast czystych słowników
@@ -54,11 +68,6 @@ class DictionaryScreen(MDBoxLayout):
                 "on_release": lambda x=sort_code: self.sort_words(x),
             })
         self.drop_sort_menu.items = items
-
-    def sort_words(self, sort_type):
-        self.drop_sort_menu.dismiss()
-        Clock.unschedule(self.load_next_word)
-        self.layout_dict.clear_widgets()
 
     def open_sort_menu(self, button):
         self.drop_sort_menu.caller = button
@@ -117,14 +126,32 @@ class DictionaryScreen(MDBoxLayout):
         self.drop_sort_menu.dismiss()
         Clock.unschedule(self.load_next_word)
         self.layout_dict.clear_widgets()
-        self.start_loading_words(sort_type)
-
+        
+        # Najpierw pobierz listę
+        self.words_to_load = list(self.app.dictionary.get_all().items())
+        
+        # Potem posortuj
         if sort_type == "abc":
             self.words_to_load.sort(key=lambda x: x[0].lower())
         elif sort_type == "new":
             self.words_to_load.reverse()
-        elif sort_type == "old":
-            return 
+        # "old" zostaje tak jak jest w bazie
+        
+        # Na końcu zacznij wyświetlać
+        Clock.schedule_interval(self.load_next_word, 0)
+        
+    def refresh_localization(self):
+        """Aktualizuje teksty interfejsu po zmianie języka."""
+        l = self.app.lang
+        
+        # 1. Aktualizacja tytułu Toolbaru
+        if hasattr(self, 'tool_bar'):
+            self.tool_bar.title = l["dictionary"]
+            
+        # 2. Przebudowanie menu sortowania (aby zmienić napisy A-Z, Najnowsze itp.)
+        self.setup_sort_menu()
+        
+    
         
 
     

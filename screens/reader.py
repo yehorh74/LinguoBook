@@ -14,11 +14,13 @@ class ReaderScreen(MDScreen):
     def __init__(self, app, **kwargs):
         super().__init__(**kwargs)
         self.app = app
-        # UI budujemy raz przy inicjalizacji
+        self.l = self.app.lang
+        self.target_lang = self.app.reader_state.target_lang 
         self.setup_ui()
 
     def on_pre_enter(self, *args):
         """Metoda Kivy wywoływana automatycznie przed wejściem na ekran."""
+        self.refresh_localization()
         self.on_enter_screen()
         # Aktualizacja tytułu książki na toolbarze przy każdym wejściu
         self.tool_bar.title = self.app.get_current_book_title()
@@ -27,12 +29,7 @@ class ReaderScreen(MDScreen):
         # Główny kontener ekranu
         main_layout = MDBoxLayout(orientation='vertical')
 
-        lang_menu = [
-            {"text": "English",   "on_release": lambda x="English": self.menu_lang_callback(x)},
-            {"text": "Polish",    "on_release": lambda x="Polish": self.menu_lang_callback(x)},
-            {"text": "Ukrainian", "on_release": lambda x="Ukrainian": self.menu_lang_callback(x)},
-            {"text": "Czech",     "on_release": lambda x="Czech": self.menu_lang_callback(x)},
-        ]
+        l = self.app.lang
 
         self.drop_lang_menu = MDDropdownMenu(
             width_mult=4,
@@ -55,14 +52,6 @@ class ReaderScreen(MDScreen):
         main_layout.add_widget(top_layout)
 
         self.reader_container = MDBoxLayout(orientation='vertical')
-        
-        available_height = (
-            Window.height
-            - dp(40)  # top bar
-            - dp(30)  # page label
-            - dp(40)  # nav
-            - dp(20)  # padding
-        )
 
         pages = self.app.reader_state.pages
         page = self.app.reader_state.current_page
@@ -70,6 +59,7 @@ class ReaderScreen(MDScreen):
         side_margin = dp(20)
 
         self.reader = ReaderTextInput(
+            self.app,
             text=pages[page] if pages else "",
             font_size=dp(18),
             readonly=True,
@@ -83,7 +73,7 @@ class ReaderScreen(MDScreen):
         self.reader.reader_screen = self
         
         self.page_label = MDLabel(
-            text=f"Page {page + 1} / {len(pages)}" if pages else "Page 0 / 0",
+            text=f"{l['page_number']} {page + 1} / {len(pages)}" if pages else f"{l['page_number']} 0 / 0",
             size_hint_y=None,
             height=dp(30),
             halign="center",
@@ -104,8 +94,6 @@ class ReaderScreen(MDScreen):
 
         main_layout.add_widget(self.reader_container)
         self.add_widget(main_layout)
-
-    # --- TWOJE NIEZMIENIONE METODY LOGICZNE ---
 
     def switch_theme_logic(self, *args):
         # Ta metoda teraz TYLKO zmienia stan globalny
@@ -162,9 +150,10 @@ class ReaderScreen(MDScreen):
             anim.start(self.reader)
 
     def update_page(self):
+        l = self.app.lang
         current_page = self.app.reader_state.current_page
         self.reader.text = self.app.reader_state.pages[current_page]
-        self.page_label.text = f"Page {current_page + 1} / {len(self.app.reader_state.pages)}"
+        self.page_label.text = f"{l['page_number']} {current_page + 1} / {len(self.app.reader_state.pages)}"
         self.slider.value = current_page + 1
         self.app.reader_state.save_position()
 
@@ -180,22 +169,24 @@ class ReaderScreen(MDScreen):
             print("Invalid input: not a number")
 
     def on_enter_screen(self):
+        l = self.app.lang
         pages = self.app.reader_state.pages
         page = self.app.reader_state.current_page
 
         if pages and page < len(pages):
             self.reader.text = pages[page]
             self.reader._trigger_refresh_text()
-            self.page_label.text = f"Page {page + 1} / {len(pages)}"
+            self.page_label.text = f"{l['page_number']} {page + 1} / {len(pages)}"
             self.slider.max = len(pages)
             self.slider.value = page + 1
             self.reader.background_color = self.theme_mode_background_color()
             self.reader.foreground_color = self.theme_mode_text_color()
 
     def set_language(self, lang_code):
-        print(f"Language set to {lang_code}")
         self.app.selected_language = lang_code
         self.app.settings.set_language(lang_code)
+        self.app.lang = self.app.localization.get_text()
+        self.refresh_localization()
 
     def open_lang_menu(self, button_instance):
         # Najpierw aktualizujemy kolory elementów
@@ -206,14 +197,19 @@ class ReaderScreen(MDScreen):
         self.drop_lang_menu.hor_growth = "left"
         self.drop_lang_menu.open()
 
-    def menu_lang_callback(self, text_item):
+    def menu_lang_callback(self, lang_code):
+        """Zmienia język docelowy tłumaczenia i fizycznie zapisuje go w JSON."""
         self.drop_lang_menu.dismiss()
         
-        # Mapowanie tekstu na kody
-        mapping = {"English": "en", "Polish": "pl", "Ukrainian": "uk", "Czech": "cs"}
-        lang_code = mapping.get(text_item, "en")
+        # 1. Zapisujemy do stanu aplikacji (żeby translator wiedział co robić)
+        self.app.reader_state.target_lang = lang_code 
         
-        self.set_language(lang_code)
+        # 2. ZAPISUJEMY do pliku JSON przez Twój manager
+        if hasattr(self.app, 'settings'):
+            self.app.settings.set_target_lang(lang_code) 
+        
+        # 3. Odświeżamy menu, żeby "kropka" (podświetlenie) się przesunęła
+        self.update_lang_menu_items()
     
     def on_slider_value_change(self, instance, value):
         page_num = int(value) - 1
@@ -234,28 +230,54 @@ class ReaderScreen(MDScreen):
             return [0, 0, 0, 1]
     
     def update_lang_menu_items(self):
-        # Pobieramy aktualny kolor z palety aplikacji
+        """Generuje listę języków tłumaczenia z poprawnymi kodami ISO."""
+        l = self.app.lang
         primary_color = self.app.theme_cls.primary_color
-        # Kolor z przezroczystością dla lepszego efektu (opcjonalnie)
-        selected_bg = [primary_color[0], primary_color[1], primary_color[2], 0.7]
+        # Kolor tła dla zaznaczonego elementu
+        selected_bg = [primary_color[0], primary_color[1], primary_color[2], 0.3]
         
+        # Mapowanie: (Nazwa z lokalizacji, Kod ISO do translatora i JSONa)
         languages = [
-            ("English", "en"),
-            ("Polish", "pl"),
-            ("Ukrainian", "uk"),
-            ("Czech", "cs"),
+            (l["lang_menu_english"], "en"),
+            (l["lang_menu_polish"], "pl"),
+            (l["lang_menu_ukrainian"], "uk"),
+            (l["lang_menu_czech"], "cs"),
         ]
         
         menu_items = []
+        # Pobieramy aktualny kod z zapisu (jeśli nie ma, to 'en')
+        current_target = self.app.settings.get_target_lang()
+
         for text, code in languages:
-            # Sprawdzamy, czy to aktualnie wybrany język
-            is_selected = self.app.selected_language == code
-            
+            is_selected = (current_target == code)
             menu_items.append({
                 "text": text,
                 "viewclass": "OneLineListItem",
-                "bg_color": selected_bg if is_selected else [0, 0, 0, 0], # Podświetlenie
-                "on_release": lambda x=text: self.menu_lang_callback(x),
+                "bg_color": selected_bg if is_selected else [0, 0, 0, 0],
+                # Tutaj lambda x=code zapewnia, że do callbacka trafi "pl", "en" itd.
+                "on_release": lambda x=code: self.menu_lang_callback(x),
             })
         
         self.drop_lang_menu.items = menu_items
+
+    def refresh_localization(self):
+        """Aktualizuje wszystkie teksty na ekranie czytnika."""
+        l = self.app.lang # Pobierz już zaktualizowany słownik
+        
+        # 1. Aktualizacja paska narzędzi (tytuł książki może mieć prefiks w przyszłości)
+        self.tool_bar.title = self.app.get_current_book_title()
+        
+        # 2. Aktualizacja numeracji stron
+        pages = self.app.reader_state.pages
+        page = self.app.reader_state.current_page
+        if pages:
+            self.page_label.text = f"{l['page_number']} {page + 1} / {len(pages)}"
+        else:
+            self.page_label.text = f"{l['page_number']} 0 / 0"
+            
+        # 3. Aktualizacja widgetu ReaderTextInput (dla popupów tłumaczeń)
+        if hasattr(self, 'reader'):
+            self.reader.refresh_localization()
+            
+        # 4. Przeładowanie menu wyboru języka (żeby nazwy języków się zmieniły)
+        self.update_lang_menu_items()

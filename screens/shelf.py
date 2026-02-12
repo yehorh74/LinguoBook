@@ -25,20 +25,23 @@ class ShelfScreen(MDBoxLayout):
     def __init__(self, app, **kwargs):
         super().__init__(orientation='vertical', spacing=10, **kwargs)
         self.app = app
+        self.l = self.app.lang
         self.books_to_load = [] # Inicjalizacja listy
 
         self.drop_sort_menu = MDDropdownMenu(width_mult=4)
         self.setup_sort_menu()
 
+        l = self.app.lang
+
         # 1. Toolbar
         top_layout = MDBoxLayout(size_hint_y=None, height=dp(40) + dp(24), padding=(0, dp(24), 0, 0))
-        tool_bar = MDTopAppBar(
-            title="BOOK SHELF", 
+        self.tool_bar = MDTopAppBar(
+            title=l["book_shelf"], 
             anchor_title="left",
             left_action_items=[["arrow-left", lambda x: self.app.go_back()]], 
             right_action_items=[["sort", self.open_sort_menu], ["plus", self.app.open_file]]
         )
-        top_layout.add_widget(tool_bar)
+        top_layout.add_widget(self.tool_bar)
         self.add_widget(top_layout)
 
         # 2. Layout książek
@@ -52,6 +55,7 @@ class ShelfScreen(MDBoxLayout):
     def on_enter(self, *args):
         """Wywoływane przy każdym wejściu na ekran."""
         self.refresh_shelf()
+        self.refresh_localization()
 
     def refresh_shelf(self, sort_type=None):
         # 1. Zatrzymaj poprzednie ładowanie
@@ -79,6 +83,8 @@ class ShelfScreen(MDBoxLayout):
         if not self.books_to_load:
             return False # Kończy schedule_interval
 
+        l = self.app.lang
+
         book = self.books_to_load.pop(0)
         book_id = book["id"]
 
@@ -95,7 +101,7 @@ class ShelfScreen(MDBoxLayout):
         list_book = ThreeLineAvatarIconListItem(
             text=book.get("title", "No Title"),
             secondary_text=book.get("author", "Unknown Author"),
-            tertiary_text=f"Progress: {int(calc_value)}%",
+            tertiary_text=f"{l['progress']}: {int(calc_value)}%",
             size_hint_x=0.95,
             pos_hint={"center_x": .5}
         )
@@ -116,13 +122,15 @@ class ShelfScreen(MDBoxLayout):
 
     def open_sort_menu(self, button):
         self.drop_sort_menu.caller = button
+        self.drop_sort_menu.hor_growth = "left"
         self.drop_sort_menu.open()
 
     def setup_sort_menu(self):
+        l = self.app.lang
         menu_data = [
-            ("Sort (A-Z)", "sort-alphabetical-ascending", "abc"),
-            ("Sort (Newest)", "sort-calendar-ascending", "new"),
-            ("Sort (Oldest)", "sort-calendar-descending", "old"),
+            (l["sort_menu_AZ"], "sort-alphabetical-ascending", "abc"),
+            (l["sort_menu_newest"], "sort-calendar-ascending", "new"),
+            (l["sort_menu_oldest"], "sort-calendar-descending", "old"),
         ]
         items = []
         for text, icon_name, sort_code in menu_data:
@@ -140,12 +148,13 @@ class ShelfScreen(MDBoxLayout):
 
     def open_dialog_instance(self, book):
         """Uproszczona wersja dialogu usuwania."""
+        l = self.app.lang
         dialog = MDDialog(
-            title="Delete Book",
-            text=f"Are you sure you want to delete '{book['title']}'?",
+            title=l["delete_book_menu"],
+            text=l["delete_confirm"].format(book_title=book['title']),
             buttons=[
-                MDFlatButton(text="CANCEL", on_release=lambda x: dialog.dismiss()),
-                MDFlatButton(text="DELETE", on_release=lambda x: self.perform_delete(book, dialog)),
+                MDFlatButton(text=l["delete_book_menu_cancel"], on_release=lambda x: dialog.dismiss()),
+                MDFlatButton(text=l["delete_book_menu_confirm_button"], on_release=lambda x: self.perform_delete(book, dialog)),
             ],
         )
         dialog.open()
@@ -159,6 +168,22 @@ class ShelfScreen(MDBoxLayout):
             self.app.clear_reader_state()
             self.app.show_home()
         else:
+            self.refresh_shelf()
+
+    def refresh_localization(self):
+        """Aktualizuje teksty na ekranie zgodnie z wybranym językiem."""
+        l = self.app.lang
+        
+        # 1. Aktualizacja Toolbaru
+        if hasattr(self, 'tool_bar'):
+            self.tool_bar.title = l["book_shelf"]
+        
+        # 2. Re-inicjalizacja menu sortowania (aby zmienić teksty wewnątrz)
+        self.setup_sort_menu()
+        
+        # 3. Odświeżenie listy książek (aby zaktualizować "tertiary_text" z postępem)
+        # Robimy to tylko jeśli nie jesteśmy w trakcie ładowania
+        if not self.books_to_load:
             self.refresh_shelf()
         
 

@@ -1,5 +1,6 @@
 import os
 from kivy.storage.jsonstore import JsonStore
+from localization.localization import Localization
 
 
 class SettingsManager:
@@ -61,3 +62,23 @@ class SettingsManager:
     def set_highlight_enabled(self, value):
         # Zapisujemy do JsonStore (metoda put automatycznie zapisuje plik)
         self.store.put("highlight_settings", enabled=value)
+
+    def set_localization(self, lang_data):
+        self.store.put("localization", selected=lang_data)
+
+    def get_localization(self):
+        if self.store.exists("localization"):
+            return self.store.get("localization").get("selected", "English")
+        return "English"  # Domyślnie angielski
+    
+    # Dodaj to do klasy SettingsManager w Twoim pliku
+    def get_target_lang(self):
+        if self.store.exists("target_translation_lang"):
+            return self.store.get("target_translation_lang").get("selected", "en")
+        return "en"
+
+    def set_target_lang(self, lang_code):
+        # JsonStore automatycznie zapisze to do pliku .json
+        self.store.put("target_translation_lang", selected=lang_code)
+    
+
