@@ -18,7 +18,9 @@ PONS_LANG_MAP = {
             "fr": "french",
             "es": "spanish",
             "cs": "czech",
-            "uk": "ukrainian"
+            "uk": "ukrainian",
+            "es": "spanich",
+            "de": "german",
         }
 
 class ReaderTextInput(TextInput):

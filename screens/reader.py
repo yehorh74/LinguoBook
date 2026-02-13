@@ -234,7 +234,7 @@ class ReaderScreen(MDScreen):
         l = self.app.lang
         primary_color = self.app.theme_cls.primary_color
         # Kolor tła dla zaznaczonego elementu
-        selected_bg = [primary_color[0], primary_color[1], primary_color[2], 0.3]
+        selected_bg = [primary_color[0], primary_color[1], primary_color[2], 0.7]
         
         # Mapowanie: (Nazwa z lokalizacji, Kod ISO do translatora i JSONa)
         languages = [
@@ -242,6 +242,8 @@ class ReaderScreen(MDScreen):
             (l["lang_menu_polish"], "pl"),
             (l["lang_menu_ukrainian"], "uk"),
             (l["lang_menu_czech"], "cs"),
+            (l["lang_menu_german"], "de"),
+            (l["lang_menu_spanish"], "es"),
         ]
         
         menu_items = []
