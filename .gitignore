@@ -19,7 +19,5 @@ Thumbs.db
 *.log
 
 # --- Lokalne dane i bazy ---
-data/
 dev/
-dictionary.json
 backup.py
