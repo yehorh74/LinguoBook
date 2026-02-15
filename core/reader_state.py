@@ -80,3 +80,19 @@ class ReaderStateManager:
         if self.store.exists(bid):
             return self.store.get(bid)
         return {}
+    
+    def get_all_progress(self):
+        """Pobiera postępy wszystkich książek ze store'a i zwraca je jako słownik."""
+        all_data = {}
+        # Przechodzimy przez wszystkie klucze w pliku JSON
+        for key in self.store.keys():
+            # Pomijamy metadane systemowe, jeśli nie są danymi książki
+            if key == '_system_meta':
+                continue
+            
+            data = self.store.get(key)
+            all_data[key] = {
+                "page": data.get("page", 0),
+                "pages": data.get("pages", [])
+            }
+        return all_data

@@ -1,0 +1,23 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# --- Kivy & Buildozer ---
+.buildozer/
+bin/
+android_manifest.xml
+
+# --- Systemowe / Śmieci ---
+.DS_Store
+Thumbs.db
+*.log
+
+# --- Lokalne dane i bazy ---
+dev/
+backup.py

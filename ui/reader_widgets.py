@@ -18,15 +18,19 @@ PONS_LANG_MAP = {
             "fr": "french",
             "es": "spanish",
             "cs": "czech",
-            "uk": "ukrainian"
+            "uk": "ukrainian",
+            "es": "spanich",
+            "de": "german",
         }
 
 class ReaderTextInput(TextInput):
     swipe_x_threshold = dp(80)
     popup_open = False
 
-    def __init__(self, **kwargs):
+    def __init__(self, app, **kwargs):
         super().__init__(**kwargs)
+        self.app = app
+        self.l = self.app.lang
 
         # === TRYB CZYTNIKA ===
         self.readonly = True
@@ -126,29 +130,43 @@ class ReaderTextInput(TextInput):
 
     def translate_word(self, word):
         app = App.get_running_app()
-        target_lang = getattr(app, "selected_language", "en")
+        
+        # FIX: Pobieramy KOD języka (np. "uk"), a nie NAZWĘ ("Українська")
+        target_lang = app.reader_state.target_lang
+        
+        # Zabezpieczenie, gdyby target_lang był pusty
+        if not target_lang:
+            target_lang = "en"
+            
         model = getattr(app, "selected_model", "GoogleTranslator")
+        l = self.app.lang
 
         try:
             if model == "GoogleTranslator":
+                # GoogleTranslator przyjmuje kody typu "uk", "pl", "en"
                 return GoogleTranslator(source="auto", target=target_lang).translate(word)
 
             elif model == "PonsTranslator":
-                target_lang = PONS_LANG_MAP.get(target_lang)
-                return PonsTranslator(source="en", target=target_lang).translate(word)
+                # PONS wymaga pełniejszych nazw z Twojego PONS_LANG_MAP
+                pons_lang = PONS_LANG_MAP.get(target_lang, "english")
+                return PonsTranslator(source="en", target=pons_lang).translate(word)
 
             elif model == "LingueeTranslator":
-                target_lang = PONS_LANG_MAP.get(target_lang)
-                return LingueeTranslator(source="english", target=target_lang).translate(word)
+                # Linguee również potrzebuje mapowania z kodów na nazwy
+                linguee_lang = PONS_LANG_MAP.get(target_lang, "english")
+                return LingueeTranslator(source="english", target=linguee_lang).translate(word)
 
         except Exception as e:
             print(f"Translation error: {e}")
-            return "[Translation error]"
+            # Zwracamy błąd z lokalizacji interfejsu
+            return l.get("translation_error", "Error")
 
     def show_word_popup(self, word):
         if self.popup_open:
             return
         self.popup_open = True
+
+        l = self.app.lang
 
         # 1. Tworzymy kontener z kółkiem ładowania
         self.popup_content = MDBoxLayout(
@@ -172,7 +190,7 @@ class ReaderTextInput(TextInput):
         )
 
         self.translation_label = MDLabel(
-            text="Translating...", font_style="Body1", halign="center",
+            text=l["translating"], font_style="Body1", halign="center",
             theme_text_color="Hint", size_hint_y=None, height=dp(28)
         )
 
@@ -182,7 +200,7 @@ class ReaderTextInput(TextInput):
 
         # 2. Tworzymy i otwieramy Dialog
         self.dialog = MDDialog(
-            title="Translation",
+            title=l["translation_popup_title"],
             type="custom",
             content_cls=self.popup_content,
             auto_dismiss=True,
@@ -204,6 +222,8 @@ class ReaderTextInput(TextInput):
         if not self.popup_open:
             return
 
+        l = self.app.lang
+
         # Usuwamy spinner i zmieniamy tekst
         self.popup_content.remove_widget(self.spinner)
         self.translation_label.text = translated_text
@@ -212,7 +232,7 @@ class ReaderTextInput(TextInput):
         # Dodajemy przycisk (teraz, gdy mamy już tłumaczenie)
         app = App.get_running_app()
         btn_add = MDRaisedButton(
-            text="ADD TO DICTIONARY",
+            text=l["add_to_dict"],
             pos_hint={'center_x': .5},
             on_release=lambda *_: (
                 app.dictionary.add(word, translated_text),
@@ -225,3 +245,7 @@ class ReaderTextInput(TextInput):
         self.popup_open = False
         # Odznaczamy tekst, gdy użytkownik zamknie okno
         self.cancel_selection()
+    
+    def refresh_localization(self):
+        """Aktualizuje lokalne odniesienie do języka."""
+        self.l = self.app.lang

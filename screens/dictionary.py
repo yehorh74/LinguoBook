@@ -11,24 +11,25 @@ class DictionaryScreen(MDBoxLayout):
     def __init__(self, app, **kwargs):
         super().__init__(orientation='vertical', spacing=10, **kwargs)
         self.app = app
+        self._word_widgets = {}  # Słownik cache: {word_key: widget_object}
         self.words_to_load = []
 
-        # 1. Menu Sortowania (Budowane ręcznie)
+        # 1. Menu Sortowania
         self.drop_sort_menu = MDDropdownMenu(width_mult=4)
         self.setup_sort_menu()
 
         # 2. Toolbar
         top_layout = MDBoxLayout(size_hint_y=None, height=dp(40) + dp(24), padding=(0, dp(24), 0, 0))
-        tool_bar = MDTopAppBar(
-            title="DICTIONARY", 
+        self.tool_bar = MDTopAppBar(
+            title=self.app.lang["dictionary"], 
             left_action_items=[["arrow-left", lambda x: self.app.go_back()]],
             right_action_items=[["sort", self.open_sort_menu]],
             anchor_title="left"
         )
-        top_layout.add_widget(tool_bar)
+        top_layout.add_widget(self.tool_bar)
         self.add_widget(top_layout)
 
-        # 2. Layout słownika
+        # 3. Layout słownika
         self.layout_dict = GridLayout(cols=1, size_hint_y=None, spacing=dp(5))
         self.layout_dict.bind(minimum_height=self.layout_dict.setter('height'))
 
@@ -36,97 +37,106 @@ class DictionaryScreen(MDBoxLayout):
         scroll_view.add_widget(self.layout_dict)
         self.add_widget(scroll_view)
 
-    def setup_sort_menu(self):
-        # Definiujemy dane menu
-        menu_data = [
-            ("Sort (A-Z)", "sort-alphabetical-ascending", "abc"),
-            ("Sort (Newest)", "sort-calendar-ascending", "new"),
-            ("Sort (Oldest)", "sort-calendar-descending", "old"),
-        ]
-        
-        # Tworzymy listę widgetów zamiast czystych słowników
-        items = []
-        for text, icon_name, sort_code in menu_data:
-            items.append({
-                "viewclass": "MyMenuItem",
-                "text": text,
-                "icon": icon_name,
-                "on_release": lambda x=sort_code: self.sort_words(x),
-            })
-        self.drop_sort_menu.items = items
-
-    def sort_words(self, sort_type):
-        self.drop_sort_menu.dismiss()
-        Clock.unschedule(self.load_next_word)
-        self.layout_dict.clear_widgets()
-
-    def open_sort_menu(self, button):
-        self.drop_sort_menu.caller = button
-        self.drop_sort_menu.open()
-
     def on_enter(self, *args):
-        """Metoda wywoływana przez ScreenManager przy każdym wejściu na ekran."""
-        # Zatrzymaj poprzednie ładowanie, jeśli jeszcze trwało
-        Clock.unschedule(self.load_next_word)
-        
-        # Wyczyść aktualne widgety
-        self.layout_dict.clear_widgets()
-        
-        # Pobierz świeże dane i zacznij ładowanie
-        self.start_loading_words()
+        """Wywoływane przy wejściu. Aktualizujemy tylko to, co nowe."""
+        self.refresh_localization()
+        self.update_dictionary_silently()
 
-    def start_loading_words(self, *args):
-        # Pobieramy najnowsze słowa z managera słownika
-        self.words_to_load = list(self.app.dictionary.get_all().items())
-        # Sortujemy od najnowszych (dodać w drop menu)
-        #self.words_to_load.reverse() 
+    def update_dictionary_silently(self):
+        """Dodaje nowe słowa do listy bez przeładowywania całości."""
+        words_dict = self.app.dictionary.get_all()
         
-        Clock.schedule_interval(self.load_next_word, 0)
-
-    def load_next_word(self, dt):
-        if not self.words_to_load:
-            return False
-
-        key, value = self.words_to_load.pop(0)
+        # Sprawdzamy, czy w bazie są słowa, których nie mamy w cache
+        for key, value in words_dict.items():
+            if key not in self._word_widgets:
+                self._create_word_widget(key, value)
         
+        # Opcjonalnie: usuwamy z widoku te, które zostały usunięte z bazy w międzyczasie
+        current_keys = set(words_dict.keys())
+        cached_keys = list(self._word_widgets.keys())
+        for cached_key in cached_keys:
+            if cached_key not in current_keys:
+                self._remove_widget_from_ui(cached_key)
+
+    def _create_word_widget(self, key, value):
+        """Tworzy widżet i dodaje go do cache."""
         list_word = OneLineAvatarIconListItem(
             text=f"{key} : {value['translation']}",
             _no_ripple_effect=True,
             size_hint_x=0.9,
             pos_hint={"center_x": .5}
         )
-
+        
         trash = IconRightWidget(
             icon="trash-can",
-            on_release=lambda btn, k=key, lw=list_word: self.delete_word(k, lw)
+            on_release=lambda btn, k=key: self.delete_word(k)
         )
-
-        word_icon = IconLeftWidgetWithoutTouch(icon="translate")
-        list_word.add_widget(word_icon)
+        
+        list_word.add_widget(IconLeftWidgetWithoutTouch(icon="translate"))
         list_word.add_widget(trash)
         
+        self._word_widgets[key] = list_word
         self.layout_dict.add_widget(list_word)
-        return True
 
-    def delete_word(self, key, list_word):
+    def _remove_widget_from_ui(self, key):
+        """Usuwa widżet z ekranu i z pamięci cache."""
+        if key in self._word_widgets:
+            widget = self._word_widgets.pop(key)
+            if widget.parent:
+                widget.parent.remove_widget(widget)
+
+    def delete_word(self, key):
+        """Usuwa słowo z bazy i natychmiastowo z UI."""
         self.app.dictionary.delete(key)
-        if list_word.parent:
-            list_word.parent.remove_widget(list_word)
- 
+        self._remove_widget_from_ui(key)
+
     def sort_words(self, sort_type):
+        """Sortowanie wymaga przebudowania layoutu (zmiana kolejności)."""
         self.drop_sort_menu.dismiss()
         Clock.unschedule(self.load_next_word)
-        self.layout_dict.clear_widgets()
-        self.start_loading_words(sort_type)
-
-        if sort_type == "abc":
-            self.words_to_load.sort(key=lambda x: x[0].lower())
-        elif sort_type == "new":
-            self.words_to_load.reverse()
-        elif sort_type == "old":
-            return 
         
+        self.layout_dict.clear_widgets()
+        self._word_widgets.clear()
+        
+        # Pobierz i posortuj dane
+        all_words = list(self.app.dictionary.get_all().items())
+        if sort_type == "abc":
+            all_words.sort(key=lambda x: x[0].lower())
+        elif sort_type == "new":
+            all_words.reverse()
+        
+        self.words_to_load = all_words
+        Clock.schedule_interval(self.load_next_word, 0)
 
-    
-    
-    
+    def load_next_word(self, dt):
+        """Krokowe ładowanie używane tylko przy pełnym re-sortowaniu."""
+        if not self.words_to_load:
+            return False
+        key, value = self.words_to_load.pop(0)
+        self._create_word_widget(key, value)
+        return True
+
+    def setup_sort_menu(self):
+        l = self.app.lang
+        menu_data = [
+            (l["sort_menu_AZ"], "sort-alphabetical-ascending", "abc"),
+            (l["sort_menu_newest"], "sort-calendar-ascending", "new"),
+            (l["sort_menu_oldest"], "sort-calendar-descending", "old"),
+        ]
+        self.drop_sort_menu.items = [
+            {
+                "viewclass": "MyMenuItem",
+                "text": text,
+                "icon": icon_name,
+                "on_release": lambda x=sort_code: self.sort_words(x),
+            } for text, icon_name, sort_code in menu_data
+        ]
+
+    def open_sort_menu(self, button):
+        self.drop_sort_menu.caller = button
+        self.drop_sort_menu.open()
+
+    def refresh_localization(self):
+        if hasattr(self, 'tool_bar'):
+            self.tool_bar.title = self.app.lang["dictionary"]
+        self.setup_sort_menu()

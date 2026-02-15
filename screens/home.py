@@ -39,6 +39,7 @@ class HomeScreen(MDNavigationLayout):
     def __init__(self, app, **kwargs):
         super().__init__(kwargs)
         self.app = app
+        self.l = self.app.lang
 
         self.app.theme_cls.bind(theme_style=self.update_theme_ui)
 
@@ -68,6 +69,9 @@ class HomeScreen(MDNavigationLayout):
 
         Clock.schedule_once(lambda dt: self.refresh_menu(), 0.1)
 
+    def on_enter(self, *args):
+        self.refresh_localization() # To teraz załatwia i drawer, i środkowe menu
+
     def update_theme_ui(self, interval, value):
         """
         Wywoływane automatycznie przy zmianie motywu. 
@@ -90,20 +94,27 @@ class HomeScreen(MDNavigationLayout):
         self.refresh_menu()
 
     def setup_nav_drawer(self):
-        # Pomocnicza funkcja do zamykania drawer i nawigacji
+        l = self.app.lang
         def nav_to(method):
             self.nav_drawer.set_state("close")
             method()
 
+        # Tworzymy nagłówek i elementy jako atrybuty, by móc je odświeżyć
+        self.drawer_header = MDNavigationDrawerHeader(text=l["menu"])
+        self.drawer_item_open = DrawerClickableItem(icon="book-open", text=l["open_book"], on_release=lambda *_: nav_to(self.app.open_file))
+        self.drawer_item_shelf = DrawerClickableItem(icon="book", text=l["book_shelf_menu"], on_release=lambda *_: nav_to(self.app.open_shelf))
+        self.drawer_item_dict = DrawerClickableItem(icon="translate", text=l["dictionary_menu"], on_release=lambda *_: nav_to(self.app.open_dictionary))
+        self.drawer_item_settings = DrawerClickableItem(icon="cog", text=l["settings_menu"], on_release=lambda *_: nav_to(self.app.open_settings))
+        self.drawer_item_exit = DrawerClickableItem(icon="exit-to-app", text=l["exit_menu"], on_release=lambda *_: self.app.stop())
+
         self.nav_drawer = MDNavigationDrawer(
             MDNavigationDrawerMenu(
-                MDNavigationDrawerHeader(text="Menu"),
-                # DODANO: nav_to zamyka menu przed przejściem dalej
-                DrawerClickableItem(icon="book-open", text="Open Book", on_release=lambda *_: nav_to(self.app.open_file)),
-                DrawerClickableItem(icon="book", text="Book Shelf", on_release=lambda *_: nav_to(self.app.open_shelf)),
-                DrawerClickableItem(icon="translate", text="Dictionary", on_release=lambda *_: nav_to(self.app.open_dictionary)),
-                DrawerClickableItem(icon="cog", text="Settings", on_release=lambda *_: nav_to(self.app.open_settings)),
-                DrawerClickableItem(icon="exit-to-app", text="Exit", on_release=lambda *_: self.app.stop()),
+                self.drawer_header,
+                self.drawer_item_open,
+                self.drawer_item_shelf,
+                self.drawer_item_dict,
+                self.drawer_item_settings,
+                self.drawer_item_exit,
             ),
             radius=(0, 16, 16, 0),
         )
@@ -113,6 +124,7 @@ class HomeScreen(MDNavigationLayout):
         self.refresh_menu()
 
     def refresh_menu(self):
+        l = self.app.lang
         """Buduje menu dynamicznie"""
         self.middle_section.clear_widgets()
 
@@ -129,7 +141,7 @@ class HomeScreen(MDNavigationLayout):
 
         # Nagłówek
         welcome_label = MDLabel(
-            text="Welcome to LinguoBook!",
+            text=l["welcome_message"],
             halign="center",
             font_style="H4",
             size_hint_y=None,
@@ -144,7 +156,7 @@ class HomeScreen(MDNavigationLayout):
             calc_value = (current_p / total_p * 100) if total_p > 0 else 0
                 
             recent_btn = MDRectangleFlatIconButton(
-                text=f"Continue: {recent['title']} ({int(calc_value)}%)",
+                text=f"{l['continue_book']}: {recent['title']} ({int(calc_value)}%)",
                 icon="book-play",
                 on_release=lambda *_: self.app.on_shelf_book_clicked(recent),
                 size_hint_x=None,
@@ -155,7 +167,7 @@ class HomeScreen(MDNavigationLayout):
             menu_container.add_widget(recent_btn)
         else:
             info_label = MDLabel(
-                text="Your recent book will appear here.",
+                text=l["recent_book"],
                 halign="center",
                 theme_text_color="Hint",
                 size_hint_y=None,
@@ -165,7 +177,7 @@ class HomeScreen(MDNavigationLayout):
 
         # Przycisk "Open Book" - WYCENTROWANY
         btn_book = MDRectangleFlatIconButton(
-            text="Open Book",
+            text=l["open_book"],
             icon="book-open",
             on_release=lambda *_: self.app.open_file(),
             size_hint_x=None,
@@ -189,3 +201,18 @@ class HomeScreen(MDNavigationLayout):
             return all_books[-1]
         except Exception:
             return None
+        
+    def refresh_localization(self):
+        l = self.app.lang  # Pobierz świeże tłumaczenia
+        
+        # 1. Odśwież Nav Drawer (jeśli atrybuty istnieją)
+        if hasattr(self, 'drawer_header'):
+            self.drawer_header.text = l["menu"]
+            self.drawer_item_open.text = l["open_book"]
+            self.drawer_item_shelf.text = l["book_shelf_menu"]
+            self.drawer_item_dict.text = l["dictionary_menu"]
+            self.drawer_item_settings.text = l["settings_menu"]
+            self.drawer_item_exit.text = l["exit_menu"]
+
+        # 2. Odśwież dynamiczne menu na środku (Welcome, Continue itp.)
+        self.refresh_menu()

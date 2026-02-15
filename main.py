@@ -20,6 +20,7 @@ from screens.dictionary import DictionaryScreen
 from core.reader_layout import ReaderLayout
 from screens.loading_screen import LoadingScreen
 from core.pagination_engine import PaginationEngine
+from localization.localization import Localization
 
 if platform == "android":
     from native.android_picker import open_android_file_picker as open_file_picker, resolve_content_uri as resolve_uri
@@ -28,22 +29,32 @@ state_file = "reader_state.json" if platform == 'android' else "dev_reader_state
 
 class LinguoBookApp(MDApp):
     def build(self):
-        # Używamy ScreenManagera dla płynnych przejść
+        self.app_version = "1.4.0"
         self.sm = MDScreenManager()
         
+        # 1. NAJPIERW tworzymy instancje managerów
         self.settings = SettingsManager()
-        self.selected_language = self.settings.get_language()
-        self.reader_state = ReaderStateManager(state_file)
+        self.reader_state = ReaderStateManager(state_file) # <--- To musi być przed użyciem self.reader_state
         self.shelf = ShelfManager()
         self.dictionary = DictionaryManager()
+        
+        # 2. POTEM przypisujemy wartości pobrane z ustawień
+        self.reader_state.target_lang = self.settings.get_target_lang() # Teraz zadziała!
+        self.selected_language = self.settings.get_language()
         self.selected_model = self.settings.get_model()
+        
+        # 3. Konfiguracja motywu i lokalizacji
         self.theme_cls.primary_palette = self.settings.get_palette()
         self.theme_cls.theme_style = self.settings.get_theme()
+        
+        # Poprawka: najpierw przypisujemy obiekt Localization, potem wyciągamy tekst
+        self.localization = Localization(self)
+        self.lang = self.localization.get_text()
         
         self.delete_mode = False
         self.previous_screen = "home"
 
-        # Inicjalne ekrany (dodajemy je raz, potem tylko przełączamy)
+        # Inicjalne ekrany
         self.setup_screens()
         
         return self.sm
@@ -113,6 +124,18 @@ class LinguoBookApp(MDApp):
             self.reader_screen_instance.on_pre_enter()
         self.previous_screen = "reader"
 
+    def update_language(self, lang_code):
+        """Wywoływane z ustawień przy zmianie języka."""
+        self.selected_language = lang_code
+        self.settings.set_language(lang_code)
+        self.lang = self.localization.get_text() # Odśwież słownik tekstów
+        
+        # Wymuś odświeżenie ekranów
+        for name, screen in self.screens.items():
+            content = screen.children[0]
+            if hasattr(content, "refresh_localization"):
+                content.refresh_localization()
+
     # --- Logika ładowania i plików ---
     def on_shelf_book_clicked(self, book):
         if self.delete_mode:
@@ -129,6 +152,24 @@ class LinguoBookApp(MDApp):
             lambda dt: self._load_and_start_pagination(book["path"]),
             0.1 # Dajemy ułamek sekundy na odświeżenie UI przed ciężką pracą
         )
+
+    def close_reader(self):
+        # Użytkownik wychodzi z czytnika
+        # 1. Zapisz postęp
+        self.reader_state.save_current_progress()
+        
+        # 2. AKTUALIZACJA W TLE (użytkownik tego nie widzi)
+        shelf_screen = self.root.get_screen('shelf').children[0] # ReaderLayout -> Shelf
+        shelf_screen.update_shelf_silently()
+        
+        # 3. Dopiero teraz zmień ekran
+        self.show_shelf()
+
+    def add_word_to_dict(self, word, trans):
+        self.dictionary.add(word, trans)
+        # Jeśli ekran słownika istnieje, zaktualizuj go po cichu
+        if self.root.has_screen('dictionary'):
+            self.root.get_screen('dictionary').update_dictionary_silently()
 
     def on_start(self):
         should_open_last = self.settings.get_open_last_book()
