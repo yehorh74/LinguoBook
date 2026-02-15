@@ -13,7 +13,7 @@ package.domain = org.daned
 source.dir = .
 
 # (list) Source files to include (let empty to include all the files)
-source.include_exts = py,png,jpg,jpeg,ttf,fb2,kv
+source.include_exts = py,png,jpg,jpeg,ttf,fb2,kv,json
 
 # (str) Application versioning (method 1)
 version = 1.4.0
