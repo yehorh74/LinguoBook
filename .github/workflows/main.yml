@@ -2,8 +2,8 @@ name: Build APK
 
 on:
   push:
-    branches: [ main, Ukrainian-localization ]  
-  workflow_dispatch:      
+    branches: [ main, Ukrainian-localization ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,7 +14,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build with Buildozer
-        uses: kainat-ismail/buildozer-action@v0.0.1
+        # Używamy sprawdzony, istniejący runner
+        uses: Artemys/buildozer-action@v1.2.2
         with:
           workdir: .
           buildozer_version: master
