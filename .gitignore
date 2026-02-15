@@ -21,6 +21,5 @@ Thumbs.db
 # --- Lokalne dane i bazy ---
 data/
 dev/
-dev_reader_state.json
 dictionary.json
 backup.py
