@@ -11,7 +11,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1.2.2
+        uses: ArtemSBulgakov/buildozer-action@v1
         id: buildozer
         with:
           workdir: .
