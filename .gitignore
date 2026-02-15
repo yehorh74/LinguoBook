@@ -11,7 +11,6 @@ venv/
 # --- Kivy & Buildozer ---
 .buildozer/
 bin/
-*.spec
 android_manifest.xml
 
 # --- Systemowe / Śmieci ---

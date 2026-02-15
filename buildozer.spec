@@ -16,7 +16,7 @@ source.dir = .
 source.include_exts = py,png,jpg,jpeg,ttf,fb2,kv
 
 # (str) Application versioning (method 1)
-version = 1.3.0
+version = 1.4.0
 
 presplash.filename = LinguoBook_splash.png
 
