@@ -171,7 +171,7 @@ class SettingsScreen(MDBoxLayout):
         lang_list = MDList()
         # Nazwy języków w popupie wyboru UI powinny być w ich własnych językach
         # żeby np. Ukrainiec zawsze widział napis "Українська"
-        langs = [("English", "English"), ("Українська", "Українська")]
+        langs = [("English", "English"), ("Українська", "Українська"), ("Polski", "Polski"), ("Česky", "Česky")]
         
         for name, code in langs:
             item = OneLineIconListItem(

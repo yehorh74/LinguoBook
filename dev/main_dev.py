@@ -22,7 +22,7 @@ from core.shelf_manager import ShelfManager
 from ui.reader_widgets import ReaderTextInput
 from core.book_importer import BookImportManager
 
-DEV_BOOK = "dev/test_books/The Little Prince - Antoine de Saint-Exupéry - FB2.fb2"
+DEV_BOOK = r"D:\Code\LinguoBook\dev\test_books\The Little Prince - Antoine de Saint-Exupéry - FB2.fb2"
 STATE_FILE = "dev_reader_state.json"
 
 

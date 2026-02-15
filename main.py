@@ -29,7 +29,7 @@ state_file = "reader_state.json" if platform == 'android' else "dev_reader_state
 
 class LinguoBookApp(MDApp):
     def build(self):
-        self.app_version = "1.3.0"
+        self.app_version = "1.4.0"
         self.sm = MDScreenManager()
         
         # 1. NAJPIERW tworzymy instancje managerów
