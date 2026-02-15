@@ -1,26 +1,24 @@
-name: Build APK
-
-on:
-  push:
-    branches: [ main, Ukrainian-localization ]
-  workflow_dispatch:
+name: Build
+on: [push, pull_request]
 
 jobs:
-  build:
+  build-android:
+    name: Build for Android
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build with Buildozer
-        uses: Artemys/buildozer-action@v1.2.2
+        uses: ArtemSBulgakov/buildozer-action@v1.2.2
+        id: buildozer
         with:
           workdir: .
-          buildozer_version: master
+          buildozer_version: stable
 
-      - name: Upload APK
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: package
-          path: bin/*.apk
+          path: ${{ steps.buildozer.outputs.filename }}
